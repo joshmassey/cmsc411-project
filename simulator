@@ -7,7 +7,7 @@ def main(cmdLineArgs):
 		print('python simulator inst.txt data.txt output.txt')
 	else:
 		# print("STEP 1")
-		mySimulation = theSimulator(cmdLineArgs[1],cmdLineArgs[2])
+		mySimulation = theSimulator(cmdLineArgs[1],cmdLineArgs[2], cmdLineArgs[3])
 
 if __name__== '__main__':
 	main(argv)

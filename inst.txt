@@ -1,4 +1,4 @@
-		LI		R8, 100h
+		LI		R8, 256
 		ADDI	R9, R8, 4
 		LI		R2, 0
 		LI		R3, 0
