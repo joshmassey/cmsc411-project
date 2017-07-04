@@ -166,7 +166,7 @@ class theSimulator:
 
 	def got_instruction(self, pc):
 		print("got_instruction!" + str(pc))
-		block = (pc/8) % 2
+		block = (pc // 8) % 2
 		word = pc % 8
 		print(block, word)
 		print(self.i_memory[block][word].line_numb)
@@ -179,8 +179,8 @@ class theSimulator:
 
 	def pop_instruction_cache(self, pc, cycle):
 		print("pop_instruction_cache!" + str(cycle) + " " + str(pc))
-		block = (pc / 8) % 2
-		word = (pc / 8) * 8
+		block = (pc // 8) % 2
+		word = (pc // 8) * 8
 		print(block, word)
 		self.i_cache_misses += 1
 		print("Populating instructions " + str(cycle))
@@ -235,10 +235,10 @@ class theSimulator:
 
 
 	def if_control(self, pc, cycle):
-		block= (pc/8)%2
+		block= (pc // 8)%2
 		word= pc%8
 		if( (self.reg_buff[0].line_numb == 00) and (self.i_memory[block][word].line_numb == (pc+1)) ):
-			block = (pc/8)%2
+			block = (pc//8)%2
 			word = pc%8
 			print("OKKKKKKKKK " + str(self.i_memory[block][word].line_numb))
 			self.reg_buff[0] = deepcopy(self.i_memory[block][word])
