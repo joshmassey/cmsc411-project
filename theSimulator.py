@@ -10,7 +10,7 @@ class Instruction:
 		self.instruction = ""
 		self.rawOperands = ""
 		self.operands = [ "" for i in range(3) ]
-		# self.proc_done = 0
+		self.clockCycles = [ ]
 
 
 class theSimulator:
@@ -19,7 +19,7 @@ class theSimulator:
 		self.theCommands = [ Instruction() for i in range(32) ]
 		self.totalLines = 0
 		self.registers = [ 0 for i in range(32) ]
-		self.pipelineClockCycles = [ "" for i in range(32) ]
+		# self.pipelineClockCycles = [ "" for i in range(32) ]
 		self.pipelineStages = ["IF", "ID", "EX1", "EX2", "EX3", "MEM", "WB"]
 		self.pipeline = { "IF": Instruction(), "ID": Instruction(), "EX1": Instruction(), \
 			"EX2": Instruction(), "EX3": Instruction(), "MEM": Instruction(), "WB": Instruction() }
@@ -81,7 +81,7 @@ class theSimulator:
 					elif( (inst_token) and (rawLines[line][i] != 0) ):
 						# print("HERE 3")
 						self.theCommands[self.totalLines-1].rawOperands = rawLines[line][i:len(rawLines[line])-1]
-						print(self.theCommands[self.totalLines-1].rawOperands)
+						# print(self.theCommands[self.totalLines-1].rawOperands)
 						# sys.exit()
 						# print("OP " + self.theCommands[self.totalLines-1].rawOperands)
 						i = len(rawLines[line]) - 1
@@ -104,19 +104,33 @@ class theSimulator:
 
 
 	def printOutput(self, fileName):
-		runningString = "Line #" + "\t" + "Label" + "\t" + "Operation" + "\t\tIF\tID\tEX\tMEM\tWB\n"
-		for i in range(self.totalLines):
-			runningString += str(self.theCommands[i].lineNum)
-			if (self.theCommands[i].label == ""):
-				runningString += "\t\t"
-			else:
-				runningString += "\t" + str(self.theCommands[i].label) + "\t"
-			runningString += self.theCommands[i].instruction + "\t"
-			if (self.theCommands[i].instruction == "HLT"):
-				runningString += "\t\t"
-			else:
-				runningString += str(self.theCommands[i].rawOperands) + "   \t"
-			runningString += self.pipelineClockCycles[i] + "\n"
+		runningString = "Line #" + "\t" + "Label" + "\t" + "Operation" + "\t\t\tIF\tID\tEX\tMEM\tWB\n"
+		for command in self.theCommands:
+			if (command.lineNum != 0):
+				runningString += str(command.lineNum)
+				if (command.label == ""):
+					runningString += "\t\t\t\t"
+				else:
+					if (len(command.label + ":") < 4):
+						runningString += "\t\t" + str(command.label) + ":\t\t"
+					else:
+						runningString += "\t\t" + str(command.label) + ":\t"
+				runningString += command.instruction + " "
+				if (len(command.instruction + " " + str(command.rawOperands)) < 4):
+					runningString += str(command.rawOperands) + "\t\t\t\t\t"
+				elif (len(command.instruction + " " + str(command.rawOperands)) < 8):
+					runningString += str(command.rawOperands) + "\t\t\t\t"
+				elif (len(command.instruction + " " + str(command.rawOperands)) < 12):
+					runningString += str(command.rawOperands) + "\t\t\t"
+				elif (len(command.instruction + " " + str(command.rawOperands)) < 16):
+					runningString += str(command.rawOperands) + "\t\t"
+				else:
+					runningString += str(command.rawOperands) + "\t"
+				# runningString += self.pipelineClockCycles[i] + "\n"
+				for cycle in command.clockCycles:
+					runningString += str(cycle) + "\t"
+				runningString += "\n"
+				# runningString += self.pipelineClockCycles[i] + "\n"
 		
 		# print(type(self.pipelineClockCycles[i]))
 		runningString += "\n\nTotal number of access requests for instruction cache: " \
@@ -128,109 +142,130 @@ class theSimulator:
 			+ "Number of data cache hits: " \
 			+ str(self.dCache_numAccesses - self.dCache_numMisses) + "\n\n"
 
-		print(runningString)
+		# print(runningString)
+		print("Output successfully written to " + fileName)
 		outFile = open(fileName, 'w')
 		outFile.write(runningString)
 		outFile.close()
 
 
 	def runSimulation(self):
-		pc = 0
+		currLine = 0
 		cycle = 0
-		pop_cycles = -1
-		counter = 0
-		while( (pc == 0) or (self.notHalt()) ):
+		cyclesPop = -1
+		counter = -1
+		while( (currLine == 0) or (self.notHalt()) ):
 			# print("HERE 1!")
 			cycle += 1
-			print("pop_cy" + str(pop_cycles))
-			if( (not self.got_instruction(pc)) and (pop_cycles < 0) ):
-				print("I CRAZILY WENT HERE!")
-				pop_cycles = 23
+			# print("cyclesPop" + str(cyclesPop))
+			if( (not self.getInstruction(currLine)) and (cyclesPop < 0) ):
+				# print("I CRAZILY WENT HERE!")
+				cyclesPop = 23
 				# print("HERE 2!")
-			print("pop_cy" + str(pop_cycles))
-			self.clear_control(cycle)
-			self.wb_control(cycle)
-			self.mem_control(cycle)
-			self.ex3_control(cycle)
-			self.ex2_control(cycle)
-			self.ex1_control(cycle)
-			jumping, pc_branch = self.id_control(pc, cycle)
-			pc = self.if_control(pc, cycle)
+			# print("cyclesPop" + str(cyclesPop))
+
+			self.clearController(cycle)
+			self.pipelineControllerWB(cycle)
+			self.pipelineControllerMEM(cycle)
+			self.pipelineControllerEX3(cycle)
+			self.pipelineControllerEX2(cycle)
+			self.pipelineControllerEX1(cycle)
+			jumping, pc_branch = self.pipelineControllerID(currLine, cycle)
+			currLine = self.pipelineControllerIF(currLine, cycle)
+
+			# currLine = self.pipelineControllerIF(currLine, cycle)
+			# jumping, pc_branch = self.pipelineControllerID(currLine, cycle)
+			# self.pipelineControllerEX1(cycle)
+			# self.pipelineControllerEX2(cycle)
+			# self.pipelineControllerEX3(cycle)
+			# self.pipelineControllerMEM(cycle)
+			# self.pipelineControllerWB(cycle)
+			# self.clearController(cycle)
 
 			if (jumping):
-				print(pc, pc_branch)
-				pc = pc_branch
-				# sys.exit()
+				# print(currLine, pc_branch)
+				# cycle -= 1
+				# self.pipelineClockCycles[self.pipeline["IF"].lineNum-1] += str(cycle) + "\t"
+				# self.pipelineClockCycles[self.pipeline["ID"].lineNum-1] += str(cycle) + "\t"
+				self.theCommands[ self.pipeline["IF"].lineNum-1 ].clockCycles.append(cycle)
+				self.theCommands[ self.pipeline["ID"].lineNum-1 ].clockCycles.append(cycle)
+				currLine = pc_branch
+				self.pipeline["IF"] = Instruction()
+				self.pipeline["ID"] = Instruction()
+				counter = 0
 
-			if (pop_cycles == 0):
-				print("I WENT HERE!")
-				self.pop_instruction_cache(pc, cycle)
-				pop_cycles -= 1
+				# sys.exit()
+			if (cyclesPop == 0):
+				# print("I WENT HERE!")
+				self.popInstructionCache(currLine, cycle)
+				cyclesPop -= 1
 				# counter += 1
-			elif (pop_cycles > 0):
-				pop_cycles -= 1
-			# counter += 1
-			# if (counter == 2):
-			# 	sys.exit()
+			elif (cyclesPop > 0):
+				cyclesPop -= 1
+			
+			if (counter > -1):
+				counter += 1
+			if (counter == 5):
+				sys.exit()
 
 		self.pipeline["IF"].lineNum = 0
 		self.pipeline["ID"].lineNum = 0
 		self.pipeline["EX1"].lineNum = 0
-		while ( self.reg_empty() ):
+		while ( self.registerEmpty() ):
 			cycle += 1
-			self.clear_control(cycle)
-			self.wb_control(cycle)
-			self.mem_control(cycle)
-			self.ex3_control(cycle)
-			self.ex2_control(cycle)
-			self.ex1_control(cycle)
+			self.clearController(cycle)
+			self.pipelineControllerWB(cycle)
+			self.pipelineControllerMEM(cycle)
+			self.pipelineControllerEX3(cycle)
+			self.pipelineControllerEX2(cycle)
+			self.pipelineControllerEX1(cycle)
 
 
 	def notHalt(self):
-		print("notHalt!")
+		# print("notHalt!")
 		result = 0
 		if (self.pipeline["EX1"].instruction != "HLT"):
 			result = 1
 		# print(self.pipeline["EX1"].instruction == "HLT")
 		# sys.exit()
-		print(result)
+		# print(result)
 		return result
 
 
-	def got_instruction(self, pc):
-		print("got_instruction!" + str(pc))
-		block = (pc // 8) % 2
-		word = pc % 8
-		print(block, word)
-		print(self.instructionMemory[block][word].lineNum)
-		print(self.theCommands[pc].lineNum)
-		if (self.instructionMemory[block][word].lineNum == self.theCommands[pc].lineNum):
+	def getInstruction(self, currLine):
+		# print("getInstruction!" + str(currLine))
+		block = (currLine // 8) % 2
+		word = currLine % 8
+		# print(block, word)
+		# print(self.instructionMemory[block][word].lineNum)
+		# print(self.theCommands[currLine].lineNum)
+		if (self.instructionMemory[block][word].lineNum == self.theCommands[currLine].lineNum):
 			return 1
 		else:
 			return 0
 
 
-	def pop_instruction_cache(self, pc, cycle):
-		print("pop_instruction_cache!" + str(cycle) + " " + str(pc))
-		block = (pc // 8) % 2
-		word = (pc // 8) * 8
-		print(block, word)
+	def popInstructionCache(self, currLine, cycle):
+		# print("popInstructionCache!" + str(cycle) + " " + str(currLine))
+		block = (currLine // 8) % 2
+		word = (currLine // 8) * 8
+		# print(block, word)
 		self.iCache_numMisses += 1
-		print("Populating instructions " + str(cycle))
+		# print("Populating instructions " + str(cycle))
 		for i in range(8):
-			print(self.theCommands[word+i].lineNum)
+			# print(self.theCommands[word+i].lineNum)
 			self.instructionMemory[block][i] = self.theCommands[word+i]
 		# sys.exit()
 		return cycle
 
 
-	def buff_move(self, stage):
+	def pipelineShift(self, stage):
 		prevStage = self.pipelineStages[ self.pipelineStages.index(stage)-1 ]
-		print("buff_move!" + str(stage))
-		print("B4 -- self.pipeline[stage].lineNum\t" + str(self.pipeline[stage].lineNum))
-		print("B4 -- self.pipeline[prevStage].lineNum\t" + str(self.pipeline[prevStage].lineNum))
+		# print("pipelineShift!" + str(stage))
+		# print("B4 -- self.pipeline[stage].lineNum\t" + str(self.pipeline[stage].lineNum))
+		# print("B4 -- self.pipeline[prevStage].lineNum\t" + str(self.pipeline[prevStage].lineNum))
 		if ( (self.pipeline[stage].lineNum == 0) and (self.pipeline[prevStage].lineNum != 0) ):
-			print("THIS IS SET!")
+			# print("THIS IS SET!")
 			self.pipeline[stage] = deepcopy(self.pipeline[prevStage])
 			self.pipeline[prevStage].lineNum = 0
 			# print("self.pipeline[stage].lineNum\t" + str(self.pipeline[stage].lineNum))
@@ -240,12 +275,12 @@ class theSimulator:
 
 
 	def decode(self, line):
-		print("decode!" + str(line))
+		# print("decode!" + str(line))
 		if (line.instruction == "LI"):
 			findComma = line.rawOperands.index(",")
 			line.operands[0]=line.rawOperands[ : findComma ]
 			line.operands[1]=line.rawOperands[ findComma+2 : ]
-			print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] )#+ "\n")
+			# print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] )#+ "\n")
 			# sys.exit()
 		elif ( (line.instruction == "ADDI") or (line.instruction == "SUBI") or (line.instruction == "ANDI") \
 			or (line.instruction == "ORI") or (line.instruction == "BEQ") or (line.instruction == "BNE") or (line.instruction == "MULTI") ):
@@ -254,7 +289,7 @@ class theSimulator:
 			line.operands[0] = line.rawOperands[ : findComma ]
 			line.operands[1] = line.rawOperands[ findComma+2 : findSecondComma ]
 			line.operands[2] = line.rawOperands[ findSecondComma+2 : ]
-			print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] + "\n" + line.operands[2])# + "\n")
+			# print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] + "\n" + line.operands[2])# + "\n")
 			# sys.exit()
 		elif ( (line.instruction == "LW") or (line.instruction == "SW")):
 			findComma = line.rawOperands.index(",")
@@ -262,8 +297,8 @@ class theSimulator:
 			line.operands[0] = line.rawOperands[0:findComma]
 			line.operands[1] = line.rawOperands[findLParen-1:findLParen]
 			line.operands[2] = line.rawOperands[findLParen+1:findLParen+3]
-			print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] + "\n" + line.operands[2])# + "\n")
-			print(line.rawOperands)
+			# print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] + "\n" + line.operands[2])# + "\n")
+			# print(line.rawOperands)
 			# sys.exit()
 		elif ( (line.instruction == "ADD") or (line.instruction == "SUB") or (line.instruction == "OR") \
 			or (line.instruction == "AND") or (line.instruction == "MULT")):
@@ -272,11 +307,11 @@ class theSimulator:
 			line.operands[0] = line.rawOperands[ : findComma ]
 			line.operands[1] = line.rawOperands[ findComma+2 : findSecondComma ]
 			line.operands[2] = line.rawOperands[ findSecondComma+2 : ]
-			print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] + "\n" + line.operands[2])# + "\n")
+			# print(line.instruction + "\n" + line.operands[0] + "\n" + line.operands[1] + "\n" + line.operands[2])# + "\n")
 			# sys.exit()
 		elif (line.instruction == "J"):
 			line.operands[0] = line.rawOperands
-			print(line.instruction + "\n" + line.operands[0])# + "\n")
+			# print(line.instruction + "\n" + line.operands[0])# + "\n")
 			# sys.exit()
 		elif (line.instruction == "HLT"):
 			pass
@@ -287,51 +322,57 @@ class theSimulator:
 			sys.exit()
 
 
-	def if_control(self, pc, cycle):
-		block = (pc // 8) % 2
-		word = pc % 8
-		if ( (self.pipeline["IF"].lineNum == 0) and (self.instructionMemory[block][word].lineNum == (pc+1)) ):
-			block = (pc // 8) % 2
-			word = pc % 8
-			print("OKKKKKKKKK " + str(self.instructionMemory[block][word].lineNum))
+	def pipelineControllerIF(self, currLine, cycle):
+		# print("HERE!")
+		block = (currLine // 8) % 2
+		word = currLine % 8
+		if ( (self.pipeline["IF"].lineNum == 0) and (self.instructionMemory[block][word].lineNum == (currLine+1)) ):
+			# self.theCommands[ self.pipeline["IF"].lineNum ].clockCycles.append(cycle)
+
+			block = (currLine // 8) % 2
+			word = currLine % 8
+			# print("OKKKKKKKKK " + str(self.instructionMemory[block][word].lineNum))
 			self.pipeline["IF"] = deepcopy(self.instructionMemory[block][word])
 			# self.pipeline["IF"].proc_done = 0
-			pc += 1
+			currLine += 1
 			self.iCache_numAccesses += 1
-		print("if_ctrl!" + str(cycle))
-		return pc
+			# self.theCommands[ self.pipeline["IF"].lineNum ].clockCycles.append(cycle)
+		# print("if_ctrl!" + str(cycle))
+		return currLine
 
 
-	def id_control(self, pc, cycle):
-		if (self.buff_move("ID")):
-			print("id_ctrl!" + str(cycle))
+	def pipelineControllerID(self, currLine, cycle):
+		# sys.exit()
+		if (self.pipelineShift("ID")):
+			# print("id_ctrl!" + str(cycle))
 			self.decode(self.pipeline["ID"])
-			cycle -= 1
-			self.pipelineClockCycles[self.pipeline["ID"].lineNum-1] += str(cycle) + "\t"
+			# cycle -= 1
+			# self.pipelineClockCycles[self.pipeline["ID"].lineNum-1] += str(cycle) + "\t"
+			self.theCommands[ self.pipeline["ID"].lineNum-1 ].clockCycles.append(cycle-1)
 
-			print(self.pipeline["ID"].instruction)
+			# print(self.pipeline["ID"].instruction)
 			if (self.pipeline["ID"].instruction == "J"):
 				for command in self.theCommands:
-					print(command.label)
-					if ((command.label != "") and (command.label == self.pipeline["ID"].operands[2])):
-						print(command.lineNum)
+					# print(command.label)
+					if ((command.label != "") and (command.label == self.pipeline["ID"].operands[0])):
+						# print(command.lineNum)
 						# sys.exit()
-						return True, command.lineNum
+						return True, command.lineNum-1
 				print("Got error in jumping to label \"" + self.pipeline["ID"].label + "\" -- label not found")
 				print("....Now terminating the program")
 				sys.exit()
 			elif (self.pipeline["ID"].instruction == "BEQ"):
-				print("WENT HERE!")
+				# print("WENT HERE!")
 				regNum1 = int(self.pipeline["ID"].operands[0][1:])
 				regNum2 = int(self.pipeline["ID"].operands[1][1:])
 				if (self.registers[regNum1] == self.registers[regNum2]):
-					print(self.pipeline["ID"].operands[2])
+					# print(self.pipeline["ID"].operands[2])
 					for command in self.theCommands:
-						print(command.label)
+						# print(command.label)
 						if ((command.label != "") and (command.label == self.pipeline["ID"].operands[2])):
-							print(command.lineNum)
+							# print(command.lineNum)
 							# sys.exit()
-							return True, command.lineNum
+							return True, command.lineNum-1
 					print("Got error in branching to label \"" + self.pipeline["ID"].label + "\" -- label not found")
 					print("....Now terminating the program")
 					sys.exit()
@@ -339,27 +380,32 @@ class theSimulator:
 				regNum1 = int(self.pipeline["ID"].operands[0][1:])
 				regNum2 = int(self.pipeline["ID"].operands[1][1:])
 				if (self.registers[regNum1] != self.registers[regNum2]):
-					for command in theCommands:
-						if (command.label == self.pipeline["ID"].label):
-							return self.pipeline["ID"].lineNum
+					# print(self.pipeline["ID"].operands[2])
+					for command in self.theCommands:
+						# print(command.label)
+						if ((command.label != "") and (command.label == self.pipeline["ID"].operands[2])):
+							# print(command.lineNum)
+							# sys.exit()
+							return True, command.lineNum-1
 					print("Got error in branching to label \"" + self.pipeline["ID"].label + "\" -- label not found")
 					print("....Now terminating the program")
 					sys.exit()
 			elif (self.pipeline["ID"].instruction == "LI"):
 				regNum = int(self.pipeline["ID"].operands[0][1:])
-				print(self.pipeline["ID"].operands[1])
+				# print(self.pipeline["ID"].operands[1])
 				immVal = int(self.pipeline["ID"].operands[1])
 				self.registers[regNum] = immVal
 				# sys.exit()
-		return False, pc
+		return False, currLine
 				
 	
 
-	def ex1_control(self, cycle):
-		if (self.buff_move("EX1")):
-			print("ex1_ctrl!" + str(cycle))
-			cycle -= 1
-			self.pipelineClockCycles[self.pipeline["EX1"].lineNum-1] += str(cycle) + "\t"
+	def pipelineControllerEX1(self, cycle):
+		if (self.pipelineShift("EX1")):
+			# print("ex1_ctrl!" + str(cycle))
+			# cycle -= 1
+			# self.pipelineClockCycles[self.pipeline["EX1"].lineNum-1] += str(cycle) + "\t"
+			self.theCommands[ self.pipeline["EX1"].lineNum-1 ].clockCycles.append(cycle-1)
 
 			if (self.pipeline["EX1"].instruction == "AND"):
 				regNum1 = int(self.pipeline["EX1"].operands[0][1:])
@@ -386,7 +432,7 @@ class theSimulator:
 				regNum1 = int(self.pipeline["EX1"].operands[0][1:])
 				offset = int(self.pipeline["EX1"].operands[1])
 				regNum2 = int(self.pipeline["EX1"].operands[2][1:])
-				print(offset, regNum2)
+				# print(offset, regNum2)
 				self.dCache_numAccesses += 1
 				if ( (offset + self.registers[regNum2] <= 0) and (offset + self.registers[regNum2] >= len(self.registers)) ):
 					self.registers[regNum1] = dataMemory[offset + self.registers[regNum2]]
@@ -397,7 +443,7 @@ class theSimulator:
 				regNum1 = int(self.pipeline["EX1"].operands[0][1:])
 				offset = int(self.pipeline["EX1"].operands[1])
 				regNum2 = int(self.pipeline["EX1"].operands[2][1:])
-				print(offset, regNum2)
+				# print(offset, regNum2)
 				self.dCache_numAccesses += 1
 				if ( (offset + self.registers[regNum2] <= 0) and (offset + self.registers[regNum2] >= len(self.registers)) ):
 					dataMemory[offset + self.registers[regNum2]] = self.registers[regNum1]
@@ -406,10 +452,9 @@ class theSimulator:
 				# sys.exit()
 
 
-	def ex2_control(self, cycle):
-		if (self.buff_move("EX2")):
-			print("ex2_ctrl!" + str(cycle))
-
+	def pipelineControllerEX2(self, cycle):
+		if (self.pipelineShift("EX2")):
+			# print("ex2_ctrl!" + str(cycle))
 			if (self.pipeline["EX2"].instruction == "ADD"):
 				regNum1 = int(self.pipeline["EX2"].operands[0][1:])
 				regNum2 = int(self.pipeline["EX2"].operands[1][1:])
@@ -434,9 +479,9 @@ class theSimulator:
 				self.registers[regNum1] = self.registers[regNum2] - immVal
 
 
-	def ex3_control(self, cycle):
-		if (self.buff_move("EX3")):
-			print("ex3_ctrl!" + str(cycle))
+	def pipelineControllerEX3(self, cycle):
+		if (self.pipelineShift("EX3")):
+			# print("ex3_ctrl!" + str(cycle))
 			# if( (self.pipeline["EX3"].instruction == "ADDI") or (self.pipeline["EX3"].instruction == "ADD") ):
 			# 	print(self.pipeline["EX3"].instruction + " " + str(cycle-1))# + "\n")
 			if (self.pipeline["EX3"].instruction == "MULT"):
@@ -452,37 +497,42 @@ class theSimulator:
 				self.registers[regNum1] = self.registers[regNum2] * immVal
 
 
-	def mem_control(self, cycle):
-		if (self.buff_move("MEM")):
-			print("mem_ctrl!" + str(cycle))
-			if( (self.pipeline["MEM"].instruction == "MULT") or (self.pipeline["MEM"].instruction == "MULTI") ):
-				print(self.pipeline["MEM"].instruction + " " + str(cycle-1))# + "\n")
-			cycle -= 1
-			self.pipelineClockCycles[self.pipeline["MEM"].lineNum-1] += str(cycle) + "\t"
+	def pipelineControllerMEM(self, cycle):
+		if (self.pipelineShift("MEM")):
+			# print("mem_ctrl!" + str(cycle))
+			# if( (self.pipeline["MEM"].instruction == "MULT") or (self.pipeline["MEM"].instruction == "MULTI") ):
+				# print(self.pipeline["MEM"].instruction + " " + str(cycle-1))# + "\n")
+			# cycle -= 1
+			# self.pipelineClockCycles[self.pipeline["MEM"].lineNum-1] += str(cycle) + "\t"
+			self.theCommands[ self.pipeline["MEM"].lineNum-1 ].clockCycles.append(cycle-1)
 
 
-	def wb_control(self, cycle):
-		if (self.buff_move("WB")):
-			print("wb_ctrl!" + str(cycle))
-			if( (self.pipeline["WB"].instruction == "LW") or (self.pipeline["WB"].instruction == "SW") ):
-				print(self.pipeline["WB"].instruction + " " + str(cycle-1))# + "\n")	
-			cycle -= 1
-			self.pipelineClockCycles[self.pipeline["WB"].lineNum-1] += str(cycle) + "\t"
+
+	def pipelineControllerWB(self, cycle):
+		if (self.pipelineShift("WB")):
+			# print("wb_ctrl!" + str(cycle))
+			# if( (self.pipeline["WB"].instruction == "LW") or (self.pipeline["WB"].instruction == "SW") ):
+				# print(self.pipeline["WB"].instruction + " " + str(cycle-1))# + "\n")	
+			# cycle -= 1
+			# self.pipelineClockCycles[self.pipeline["WB"].lineNum-1] += str(cycle) + "\t"
+			self.theCommands[ self.pipeline["WB"].lineNum-1 ].clockCycles.append(cycle-1)
 
 
-	def clear_control(self, cycle):
+
+	def clearController(self, cycle):
 		# print("HERE 2.5!")
 		if(self.pipeline["WB"].lineNum != 0):
-			print("clear_ctrl!" + str(cycle))
-			cycle -= 1
-			self.pipelineClockCycles[self.pipeline["WB"].lineNum-1] += str(cycle) + "\t"
+			# print("clear_ctrl!" + str(cycle))
+			# cycle -= 1
+			# self.pipelineClockCycles[self.pipeline["WB"].lineNum-1] += str(cycle) + "\t"
+			self.theCommands[ self.pipeline["WB"].lineNum-1 ].clockCycles.append(cycle-1)
 			self.pipeline["WB"].lineNum = 0
 
 
-	def reg_empty(self):
+	def registerEmpty(self):
 		result = 0
 		for stage in self.pipelineStages:
-			print("reg_empty!")
+			# print("registerEmpty!")
 			if (self.pipeline[stage].lineNum != 0):
 				result += 1
 		return result
